@@ -41,10 +41,7 @@ function applyContent() {
   document.querySelectorAll("[data-content]").forEach((el) => {
     const v = site[el.dataset.content];
     if (typeof v !== "string" || !v) return;
-    if (el.dataset.content === "hero_title") {
-      const [a, b] = v.split(/\s[–-]\s/);
-      el.innerHTML = b ? `${esc(a)}&nbsp;–<br><em>${esc(b)}</em>` : esc(v);
-    }
+    if (el.dataset.content === "hero_title") el.innerHTML = `${esc(v).replace(/ (–|-) /g, "&nbsp;$1 ")} <span class="heart">♥</span>`;
     else el.textContent = v;
   });
   $("#aboutText").innerHTML = (site.about_text || []).map((t, i) => `<p${i ? "" : ' class="first"'}>${esc(t)}</p>`).join("");
@@ -71,11 +68,9 @@ function renderPuppies() {
         <img src="${esc(small(p.main_image))}" alt="${esc(p.alt || p.name)}" loading="lazy" width="560" height="560">
         <span class="status ${st.cls}">${st.label}</span>
       </div>
-      <div class="card-body">
-        <div class="card-title"><h3>${esc(p.name)}</h3><span class="age">${ageLabel(p)}</span></div>
-        <div class="chips"><span>${BREED[p.breed] || ""}</span><span>${GENDER[p.gender] || ""}</span><span>${esc(p.color)}</span></div>
-        <span class="more">לכל הפרטים <svg><use href="#i-arrow"/></svg></span>
-      </div>
+      <h3>${esc(p.name)}</h3>
+      <div class="meta"><span>${BREED[p.breed] || ""}</span><span>${GENDER[p.gender] || ""}</span><span>${ageLabel(p)}</span><span>${esc(p.color)}</span></div>
+      <span class="btn btn-primary btn-small">לפרטים ‹</span>
     </article>`;
   }).join("");
   grid.querySelectorAll(".card").forEach((c) => {
@@ -102,15 +97,15 @@ function openPuppy(id, push = true) {
       <h2 id="pdName">${esc(p.name)}</h2>
       <p>${esc(p.description)}</p>
       <dl class="facts">
-        <div><dt>מין</dt><dd>${GENDER[p.gender] || ""}</dd></div>
-        <div><dt>גזע</dt><dd>${BREED[p.breed] || ""}</dd></div>
-        <div><dt>גיל</dt><dd>${ageText(p.birth_date)}</dd></div>
-        <div><dt>צבע</dt><dd>${esc(p.color)}</dd></div>
-        <div><dt>תאריך לידה</dt><dd>${dateHe(p.birth_date)}</dd></div>
+        <dt>מין</dt><dd>${GENDER[p.gender] || ""}</dd>
+        <dt>גזע</dt><dd>${BREED[p.breed] || ""}</dd>
+        <dt>גיל</dt><dd>${ageText(p.birth_date)}</dd>
+        <dt>צבע</dt><dd>${esc(p.color)}</dd>
+        <dt>תאריך לידה</dt><dd>${dateHe(p.birth_date)}</dd>
       </dl>
       <div class="modal-actions">
         <a class="btn btn-wa" target="_blank" rel="noopener" href="${waLink(`היי, ראיתי באתר את ${p.name} ואני אשמח לקבל פרטים נוספים.`)}"><svg><use href="#i-wa"/></svg>שאלו על ${esc(p.name)} בוואטסאפ</a>
-        <a class="btn btn-light" href="${telLink()}"><svg><use href="#i-phone"/></svg>התקשרו: <span dir="ltr">${esc(site.phone)}</span></a>
+        <a class="btn btn-soft" href="${telLink()}"><svg><use href="#i-phone"/></svg>התקשרו: <span dir="ltr">${esc(site.phone)}</span></a>
       </div>
     </div>
   </div>`;
