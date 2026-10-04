@@ -1,0 +1,26 @@
+[
+  {
+    "id": 1, "slug": "moka", "name": "מוקה", "gender": "female", "breed": "toy",
+    "color": "אדום־אפריקוט", "birth_date": "2026-08-02", "status": "available", "is_visible": true,
+    "description": "מוקה היא הגורה הכי חברותית בהמלטה. אוהבת להתכרבל על הגב, לבקש ליטופים בבטן ולהירדם על השמיכה הכי רכה בבית.",
+    "main_image": "images/p01.webp",
+    "images": ["images/p01.webp", "images/p12.webp", "images/p11.webp"],
+    "alt": "גורת פודל טוי בצבע אדום־אפריקוט שוכבת על הגב על שמיכה"
+  },
+  {
+    "id": 2, "slug": "cinnamon", "name": "קינמון", "gender": "male", "breed": "mini",
+    "color": "אפריקוט", "birth_date": "2026-08-10", "status": "available", "is_visible": true,
+    "description": "קינמון סקרן ושקט. אוהב לשבת על כף היד, להריח כל דבר בדשא ולחזור אלינו לחיבוק.",
+    "main_image": "images/p05.webp",
+    "images": ["images/p05.webp", "images/p09.webp"],
+    "alt": "גור פודל ננסי בצבע אפריקוט יושב על כף יד מעל דשא"
+  },
+  {
+    "id": 3, "slug": "buba", "name": "בובה", "gender": "female", "breed": "toy",
+    "color": "קרמל", "birth_date": "2026-07-20", "status": "reserved", "is_visible": true,
+    "description": "בובה היא הנסיכה של הבית. רגועה, מתוקה ואוהבת שמסדרים לה את הפרווה.",
+    "main_image": "images/p03.webp",
+    "images": ["images/p03.webp", "images/p06.webp"],
+    "alt": "גורת פודל טוי בצבע קרמל עם סיכות צבעוניות שוכבת על מיטה"
+  }
+]
