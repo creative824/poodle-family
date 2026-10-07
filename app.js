@@ -57,6 +57,7 @@ function applyContent() {
 function renderPuppies() {
   const list = puppies.filter((p) => p.is_visible);
   const grid = $("#puppyGrid");
+  if (!grid) return;
   if (!list.length) {
     grid.innerHTML = `<p class="empty">כרגע אין גורים זמינים. כתבו לנו ונעדכן כשתהיה המלטה חדשה.</p>`;
     return;
