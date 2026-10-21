@@ -14,18 +14,22 @@ const GA4_ID = "";        // e.g. "G-XXXXXXXXXX"
     fbq("track", "PageView");
   }
 
+  // The Google tag (Google Ads AW-18473205415) is loaded in index.html <head>.
+  // A GA4 ID here just adds a second destination to the same gtag.
   if (GA4_ID) {
-    const s = document.createElement("script");
-    s.async = true;
-    s.src = "https://www.googletagmanager.com/gtag/js?id=" + encodeURIComponent(GA4_ID);
-    document.head.appendChild(s);
-    window.dataLayer = window.dataLayer || [];
-    window.gtag = function () { dataLayer.push(arguments); };
-    gtag("js", new Date());
+    if (!window.gtag) {
+      const s = document.createElement("script");
+      s.async = true;
+      s.src = "https://www.googletagmanager.com/gtag/js?id=" + encodeURIComponent(GA4_ID);
+      document.head.appendChild(s);
+      window.dataLayer = window.dataLayer || [];
+      window.gtag = function () { dataLayer.push(arguments); };
+      gtag("js", new Date());
+    }
     gtag("config", GA4_ID);
   }
 
-  if (!META_PIXEL_ID && !GA4_ID) return;
+  if (!META_PIXEL_ID && !window.gtag) return;
 
   // One "lead" per click on WhatsApp, phone or Facebook, wherever the link is on the page.
   function channelOf(href) {
