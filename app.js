@@ -1,5 +1,5 @@
-// פודל משפחתי: all puppies, gallery photos and texts come from data/*.json
-// (the same fields the admin panel will manage later), never from this file.
+// פודל משפחתי: texts and gallery photos come from the admin panel (Supabase)
+// or, as a fallback, from data/*.json, never from this file.
 document.documentElement.classList.add("js");
 
 const GENDER = { male: "זכר", female: "נקבה" };
@@ -42,8 +42,17 @@ function applyContent() {
     const v = site[el.dataset.content];
     if (typeof v !== "string" || !v) return;
     if (el.dataset.content === "hero_title") el.innerHTML = `${esc(v).replace(/ (–|-) /g, "&nbsp;$1 ")} <span class="heart">♥</span>`;
-    else el.textContent = v;
+    else el.innerHTML = esc(v).replace(/\n/g, "<br>");
   });
+  document.querySelectorAll("[data-img]").forEach((img) => {
+    const src = site[img.dataset.img];
+    if (!src) return;
+    img.src = img.dataset.size === "sm" ? small(src) : src;
+    if (img.srcset) img.srcset = `${small(src)} 560w, ${src} 1200w`;
+    const alt = site[img.dataset.img + "_alt"];
+    if (alt) img.alt = alt;
+  });
+  if (site.facebook) document.querySelectorAll("[data-fb]").forEach((a) => (a.href = site.facebook));
   $("#aboutText").innerHTML = (site.about_text || []).map((t, i) => `<p${i ? "" : ' class="first"'}>${esc(t)}</p>`).join("");
   const general = "היי, הגעתי מהאתר של פודל משפחתי ואשמח לשמוע על הגורים.";
   document.querySelectorAll("[data-wa]").forEach((a) => { a.href = waLink(general); a.target = "_blank"; a.rel = "noopener"; });
@@ -199,11 +208,37 @@ async function load(path) {
   if (!r.ok) throw new Error(path);
   return r.json();
 }
+// Texts and photos saved from the admin panel live in Supabase (table "content",
+// rows "site" and "gallery"). If it isn't configured or can't be reached, the
+// site falls back to the JSON files in the repo.
+async function loadCms() {
+  const cfg = window.CMS_CONFIG || {};
+  if (!cfg.supabaseUrl || !cfg.supabaseAnonKey) return {};
+  try {
+    const r = await fetch(`${cfg.supabaseUrl}/rest/v1/content?select=id,data`, {
+      headers: { apikey: cfg.supabaseAnonKey, Authorization: `Bearer ${cfg.supabaseAnonKey}` },
+      cache: "no-cache",
+    });
+    if (!r.ok) throw new Error(r.status);
+    return Object.fromEntries((await r.json()).map((row) => [row.id, row.data]));
+  } catch (err) {
+    console.error("cms", err);
+    return {};
+  }
+}
+// ?preview shows the unsaved draft from the admin panel's demo mode (same browser only).
+function loadDraft() {
+  if (!/[?&]preview\b/.test(location.search)) return {};
+  try { return JSON.parse(localStorage.getItem("poodle-cms-draft")) || {}; } catch { return {}; }
+}
 (async () => {
   try {
-    [site, puppies, gallery] = await Promise.all([load("data/site.json"), load("data/puppies.json"), load("data/gallery.json")]);
+    const [cms, s, p, g] = await Promise.all([loadCms(), load("data/site.json"), load("data/puppies.json"), load("data/gallery.json")]);
+    const draft = loadDraft();
+    site = { ...s, ...cms.site, ...draft.site };
+    puppies = p;
+    gallery = draft.gallery || cms.gallery || g;
   } catch (err) {
-    $("#puppyGrid").innerHTML = `<p class="empty">לא הצלחנו לטעון את רשימת הגורים. נסו לרענן את העמוד.</p>`;
     console.error(err);
   }
   applyContent();

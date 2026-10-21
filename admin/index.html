@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>ניהול האתר · פודל משפחתי</title>
+<link rel="icon" href="../images/logo-sm.webp">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Rubik:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="admin.css">
+</head>
+<body>
+
+<div class="demo-bar" id="demoBar" hidden>מצב הדגמה: השינויים נשמרים רק בדפדפן הזה ולא עולים לאתר האמיתי.</div>
+
+<!-- login -->
+<main class="login" id="loginView" hidden>
+  <form class="login-card" id="loginForm">
+    <img src="../images/logo-sm.webp" alt="" width="120" height="123">
+    <h1>ניהול האתר</h1>
+    <p class="muted">פודל משפחתי</p>
+    <label>אימייל<input type="email" name="email" autocomplete="username" required dir="ltr"></label>
+    <label>סיסמה<input type="password" name="password" autocomplete="current-password" required dir="ltr"></label>
+    <button class="btn primary" type="submit">כניסה</button>
+    <p class="error" id="loginError" role="alert"></p>
+    <p class="muted small" id="loginHint" hidden>בהדגמה אפשר להיכנס עם כל אימייל וסיסמה.</p>
+  </form>
+</main>
+
+<!-- editor -->
+<div class="app" id="appView" hidden>
+  <header class="topbar">
+    <div class="brand"><img src="../images/logo-sm.webp" alt="" width="40" height="41"><span>ניהול האתר</span></div>
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="texts" aria-selected="true">טקסטים ותמונות</button>
+      <button role="tab" data-tab="gallery" aria-selected="false">גלריה</button>
+    </nav>
+    <div class="top-actions">
+      <a class="btn ghost" id="viewSite" target="_blank" rel="noopener">צפייה באתר ↗</a>
+      <button class="btn ghost" id="logout">יציאה</button>
+    </div>
+  </header>
+
+  <main class="content">
+    <section id="tab-texts" class="tab-panel"></section>
+    <section id="tab-gallery" class="tab-panel" hidden>
+      <div class="panel-head">
+        <div>
+          <h2>גלריה</h2>
+          <p class="muted">גוררים כדי לשנות סדר, או משתמשים בחצים. התמונה הראשונה מופיעה ראשונה באתר.</p>
+        </div>
+        <label class="btn primary file-btn">+ הוספת תמונות<input type="file" id="addPhotos" accept="image/*" multiple hidden></label>
+      </div>
+      <div class="gallery-list" id="galleryList"></div>
+    </section>
+  </main>
+
+  <footer class="savebar">
+    <span class="save-state" id="saveState">אין שינויים</span>
+    <button class="btn ghost" id="discard" disabled>ביטול שינויים</button>
+    <button class="btn primary" id="save" disabled>שמירה ופרסום</button>
+  </footer>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="../config.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="admin.js"></script>
+</body>
+</html>
