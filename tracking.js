@@ -2,6 +2,7 @@
 // Nothing loads until an ID is filled in below. Fill one or both, push, done.
 const META_PIXEL_ID = ""; // e.g. "123456789012345"
 const GA4_ID = "";        // e.g. "G-XXXXXXXXXX"
+const ADS_CONVERSION = "AW-18473205415/Ceh-COX94oQdEKf92uhE";
 
 (function () {
   if (META_PIXEL_ID) {
@@ -45,6 +46,10 @@ const GA4_ID = "";        // e.g. "G-XXXXXXXXXX"
     if (!channel) return;
     const label = (a.textContent || a.getAttribute("aria-label") || "").trim().slice(0, 80);
     if (window.fbq) fbq("track", "Lead", { content_name: channel, content_category: label });
-    if (window.gtag) gtag("event", "generate_lead", { method: channel, link_text: label });
+    if (window.gtag) {
+      gtag("event", "generate_lead", { method: channel, link_text: label, transport_type: "beacon" });
+      // Google Ads conversion (orgil's "צפייה בדף" conversion), counted per contact click, not per page view.
+      gtag("event", "conversion", { send_to: ADS_CONVERSION, transport_type: "beacon" });
+    }
   }, true);
 })();
