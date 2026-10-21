@@ -1,5 +1,5 @@
-// פודל משפחתי: texts and gallery photos come from data/*.json (edited through
-// the admin panel, which commits them to the repo), never from this file.
+// פודל משפחתי: texts and gallery photos come from the admin panel or, as a
+// fallback, from data/*.json, never from this file.
 document.documentElement.classList.add("js");
 
 const GENDER = { male: "זכר", female: "נקבה" };
@@ -208,6 +208,17 @@ async function load(path) {
   if (!r.ok) throw new Error(path);
   return r.json();
 }
+// Texts and photos saved in the admin panel (admin.poodle-family.co.il) override
+// data/*.json. If the panel can't be reached quickly, the JSON files are used.
+const CONTENT_API = "https://admin.poodle-family.co.il/public/content";
+async function loadSaved() {
+  try {
+    const r = await fetch(CONTENT_API, { signal: AbortSignal.timeout(2500) });
+    return r.ok ? await r.json() : {};
+  } catch {
+    return {};
+  }
+}
 // ?preview shows the unsaved draft from the admin panel's demo mode (same browser only).
 function loadDraft() {
   if (!/[?&]preview\b/.test(location.search)) return {};
@@ -215,11 +226,11 @@ function loadDraft() {
 }
 (async () => {
   try {
-    const [s, p, g] = await Promise.all([load("data/site.json"), load("data/puppies.json"), load("data/gallery.json")]);
+    const [saved, s, p, g] = await Promise.all([loadSaved(), load("data/site.json"), load("data/puppies.json"), load("data/gallery.json")]);
     const draft = loadDraft();
-    site = { ...s, ...draft.site };
+    site = { ...s, ...saved.site, ...draft.site };
     puppies = p;
-    gallery = draft.gallery || g;
+    gallery = draft.gallery || saved.gallery || g;
   } catch (err) {
     console.error(err);
   }

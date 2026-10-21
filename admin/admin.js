@@ -1,13 +1,15 @@
 // Admin panel for פודל משפחתי.
 // Live mode: served by the Cloudflare Worker (worker/admin-worker.js) at a secret
-// link, admin.poodle-family.co.il/<key>. Saving sends everything to the Worker,
-// which checks the key and commits data/*.json and new photos to the repo;
-// GitHub Pages then republishes the site.
+// link, admin.poodle-family.co.il/<key>. Saving sends texts, gallery and new
+// photos to the Worker, which checks the key and stores them; the site reads
+// them from the Worker on every visit.
 // Demo mode (opened anywhere else): changes stay in this browser and show on
 // the site at ?preview.
 const BASE = document.querySelector('meta[name="site-base"]')?.content ?? "../";
 const DRAFT_KEY = "poodle-cms-draft";
 const LIVE = document.querySelector('meta[name="admin-mode"]')?.content === "worker";
+// On the public site the page is only a shell for the Worker; demo mode is for previews.
+const PUBLIC_SITE = /(^|\.)poodle-family\.co\.il$|github\.io$/.test(location.hostname);
 const KEY = LIVE ? decodeURIComponent(location.pathname.split("/")[1] || "") : "";
 const API = location.origin + "/api/";
 // Photos uploaded this session but not yet on the published site: path -> data URL.
@@ -103,8 +105,8 @@ async function api(path, body) {
 }
 async function loadAll() {
   if (LIVE) {
-    // straight from the repo, so a save shows up here before the site republishes
-    saved = await api("content");
+    const { site, gallery } = await api("content");
+    saved = { site, gallery };
   } else {
     const [site, gallery] = await Promise.all([loadJson("data/site.json"), loadJson("data/gallery.json")]);
     let stored = {};
@@ -117,8 +119,8 @@ async function saveAll() {
   if (LIVE) {
     const used = JSON.stringify(state);
     const files = Object.entries(pending)
-      .filter(([path]) => used.includes(path.replace(/-sm\.webp$/, ".webp")))
-      .map(([path, dataUrl]) => ({ path, base64: dataUrl.slice(dataUrl.indexOf(",") + 1) }));
+      .filter(([src]) => used.includes(src.replace(/-sm\.webp$/, ".webp")))
+      .map(([src, dataUrl]) => ({ name: src.split("/").pop(), base64: dataUrl.slice(dataUrl.indexOf(",") + 1) }));
     await api("save", { site: state.site, gallery: state.gallery, files });
   } else {
     localStorage.setItem(DRAFT_KEY, JSON.stringify(state));
@@ -149,10 +151,10 @@ async function uploadPhoto(file) {
   if (!LIVE) return asDataUrl(await toWebp(file, 900)); // demo: kept small to fit in browser storage
   // live: held here and committed with the next save
   const [big, sm] = await Promise.all([toWebp(file, 1600), toWebp(file, 560)]);
-  const path = `images/u/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.webp`;
-  pending[path] = await asDataUrl(big);
-  pending[small(path)] = await asDataUrl(sm);
-  return path;
+  const src = `${location.origin}/img/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.webp`;
+  pending[src] = await asDataUrl(big);
+  pending[small(src)] = await asDataUrl(sm);
+  return src;
 }
 
 /* ---------- dirty state ---------- */
@@ -354,7 +356,7 @@ $("#save").addEventListener("click", async () => {
   try {
     await saveAll();
     refreshDirty();
-    toast(LIVE ? "נשמר! האתר יתעדכן תוך דקה בערך" : "נשמר בהדגמה. אפשר לראות ב״צפייה באתר״");
+    toast(LIVE ? "נשמר! השינויים כבר באתר" : "נשמר בהדגמה. אפשר לראות ב״צפייה באתר״");
   } catch (err) {
     console.error(err);
     const quota = err && err.name === "QuotaExceededError";
@@ -371,6 +373,11 @@ $("#discard").addEventListener("click", () => {
 });
 
 (async () => {
+  if (!LIVE && PUBLIC_SITE) {
+    $("#appView").hidden = true;
+    $("#badLink").hidden = false;
+    return;
+  }
   $("#demoBar").hidden = LIVE;
   $("#viewSite").href = siteUrl();
   const done = busy("טוען…");

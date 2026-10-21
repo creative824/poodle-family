@@ -1,25 +1,27 @@
-// Cloudflare Worker behind admin.poodle-family.co.il.
-// https://admin.poodle-family.co.il/<ADMIN_KEY> opens the admin panel; saving
-// commits data/site.json, data/gallery.json and new photos to the repo, and
-// GitHub Pages republishes the site.
-// Secrets (Worker → Settings → Variables and Secrets):
-//   ADMIN_KEY     the secret part of the link
-//   GITHUB_TOKEN  fine-grained token, this repo only, Contents: read and write
-const REPO = "creative824/poodle-family";
-const BRANCH = "main";
+// Cloudflare Worker behind admin.poodle-family.co.il (deployed by
+// .github/workflows/admin-worker.yml, settings in worker/wrangler.toml).
+//   /<key>             the admin panel (the static page from the site)
+//   /api/content|save  read / save, need the key in X-Admin-Key
+//   /public/content    what the site reads on every visit
+//   /img/<name>.webp   photos uploaded from the panel
+// Texts and photos live in the KV namespace CONTENT. Only a SHA-256 of the key
+// is stored (ADMIN_KEY_SHA256), so the repo can stay public.
 const SITE = "https://creative824.github.io/poodle-family/";
 const MAX_BODY = 40 * 1024 * 1024;
-const PHOTO_PATH = /^images\/u\/[\w-]+\.webp$/;
+const PHOTO = /^[\w-]+\.webp$/;
+const CORS = { "Access-Control-Allow-Origin": "*" };
 
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
     const [first, second] = url.pathname.split("/").filter(Boolean);
     try {
+      if (first === "public" && second === "content") return await publicContent(env);
+      if (first === "img" && second) return await photo(env, second);
       if (first === "api") {
         if (!(await keyOk(req.headers.get("X-Admin-Key"), env))) return json({ error: "unauthorized" }, 401);
         if (second === "content" && req.method === "GET") return json(await readContent(env));
-        if (second === "save" && req.method === "POST") return json(await save(req, env));
+        if (second === "save" && req.method === "POST") return json(await save(req, env, url.origin));
         return json({ error: "not found" }, 404);
       }
       if (req.method === "GET" && first && !second && (await keyOk(decodeURIComponent(first), env))) return await adminPage();
@@ -30,15 +32,17 @@ export default {
   },
 };
 
+const sha256 = async (s) => new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)));
 async function keyOk(given, env) {
-  if (!given || !env.ADMIN_KEY) return false;
-  const h = async (s) => new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)));
-  const [a, b] = await Promise.all([h(given), h(env.ADMIN_KEY)]);
+  const want = env.ADMIN_KEY_SHA256 || "";
+  if (!given || want.length !== 64) return false;
+  const a = await sha256(given);
+  const b = Uint8Array.from(want.match(/../g), (h) => parseInt(h, 16));
   return crypto.subtle.timingSafeEqual(a, b);
 }
 
-const json = (data, status = 200) =>
-  new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
+const json = (data, status = 200, extra = {}) =>
+  new Response(JSON.stringify(data), { status, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...extra } });
 
 // The panel itself is the static page from the site; <base> keeps its relative links working.
 async function adminPage() {
@@ -54,56 +58,43 @@ async function adminPage() {
   });
 }
 
-async function gh(env, path, init = {}) {
-  const r = await fetch(`https://api.github.com/repos/${REPO}/${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${env.GITHUB_TOKEN}`,
-      Accept: "application/vnd.github+json",
-      "User-Agent": "poodle-family-admin",
-      "X-GitHub-Api-Version": "2022-11-28",
-      ...(init.body ? { "Content-Type": "application/json" } : {}),
-    },
-  });
-  if (!r.ok) throw new Error(`GitHub ${r.status}: ${(await r.text()).slice(0, 200)}`);
-  return r.json();
-}
-
-async function readFile(env, path) {
-  const f = await gh(env, `contents/${path}?ref=${BRANCH}`);
-  const bytes = Uint8Array.from(atob(f.content.replace(/\n/g, "")), (c) => c.charCodeAt(0));
-  return JSON.parse(new TextDecoder().decode(bytes));
-}
 async function readContent(env) {
-  const [site, gallery] = await Promise.all([readFile(env, "data/site.json"), readFile(env, "data/gallery.json")]);
+  const saved = await env.CONTENT.get("content", "json");
+  if (saved) return saved;
+  // nothing saved yet: start from the JSON files on the site
+  const get = async (p) => (await fetch(SITE + p, { cf: { cacheTtl: 0 } })).json();
+  const [site, gallery] = await Promise.all([get("data/site.json"), get("data/gallery.json")]);
   return { site, gallery };
 }
 
-async function save(req, env) {
+async function publicContent(env) {
+  const saved = await env.CONTENT.get("content", { type: "json", cacheTtl: 30 });
+  return json(saved || {}, 200, { ...CORS, "Cache-Control": "public, max-age=30" });
+}
+
+async function photo(env, name) {
+  if (!PHOTO.test(name)) return new Response("not found", { status: 404 });
+  const data = await env.CONTENT.get("img:" + name, { type: "arrayBuffer", cacheTtl: 86400 });
+  if (!data) return new Response("not found", { status: 404 });
+  return new Response(data, { headers: { "Content-Type": "image/webp", "Cache-Control": "public, max-age=31536000, immutable", ...CORS } });
+}
+
+async function save(req, env, origin) {
   if (+req.headers.get("Content-Length") > MAX_BODY) throw new Error("התמונות גדולות מדי לשמירה אחת");
   const { site, gallery, files = [] } = await req.json();
   if (!site || typeof site !== "object" || Array.isArray(site)) throw new Error("bad site");
   if (!Array.isArray(gallery) || !gallery.every((g) => g && typeof g.image === "string")) throw new Error("bad gallery");
   for (const f of files) {
-    const ok = f && typeof f.base64 === "string" && (PHOTO_PATH.test(f.path) || PHOTO_PATH.test(f.path?.replace(/-sm\.webp$/, ".webp")));
-    if (!ok) throw new Error("bad file " + (f && f.path));
+    if (!f || typeof f.base64 !== "string" || !PHOTO.test(f.name || "")) throw new Error("bad file " + (f && f.name));
   }
-
-  // one commit for everything: blobs → tree → commit → move the branch
-  const ref = await gh(env, `git/ref/heads/${BRANCH}`);
-  const head = await gh(env, `git/commits/${ref.object.sha}`);
-  const blob = (content, encoding) => gh(env, "git/blobs", { method: "POST", body: JSON.stringify({ content, encoding }) });
-  const entries = [
-    { path: "data/site.json", content: JSON.stringify(site, null, 2) + "\n" },
-    { path: "data/gallery.json", content: JSON.stringify(gallery, null, 2) + "\n" },
-  ].map((e) => ({ path: e.path, mode: "100644", type: "blob", content: e.content }));
-  for (const f of files) entries.push({ path: f.path, mode: "100644", type: "blob", sha: (await blob(f.base64, "base64")).sha });
-  const tree = await gh(env, "git/trees", { method: "POST", body: JSON.stringify({ base_tree: head.tree.sha, tree: entries }) });
-  if (tree.sha === head.tree.sha) return { ok: true, unchanged: true };
-  const commit = await gh(env, "git/commits", {
-    method: "POST",
-    body: JSON.stringify({ message: "עדכון תוכן מממשק הניהול", tree: tree.sha, parents: [ref.object.sha] }),
-  });
-  await gh(env, `git/refs/heads/${BRANCH}`, { method: "PATCH", body: JSON.stringify({ sha: commit.sha }) });
-  return { ok: true, commit: commit.sha };
+  // photos first, so the content never points at a photo that isn't there
+  for (const f of files) {
+    const bytes = Uint8Array.from(atob(f.base64), (c) => c.charCodeAt(0));
+    await env.CONTENT.put("img:" + f.name, bytes);
+  }
+  const value = JSON.stringify({ site, gallery, saved_at: new Date().toISOString() });
+  await env.CONTENT.put("content", value);
+  // every saved version is kept for 90 days, in case a save needs undoing
+  await env.CONTENT.put("history:" + Date.now(), value, { expirationTtl: 60 * 60 * 24 * 90 });
+  return { ok: true, photos: origin + "/img/" };
 }
