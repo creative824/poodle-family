@@ -15,22 +15,16 @@
 
 <div class="demo-bar" id="demoBar" hidden>מצב הדגמה: השינויים נשמרים רק בדפדפן הזה ולא עולים לאתר האמיתי.</div>
 
-<!-- login -->
-<main class="login" id="loginView" hidden>
-  <form class="login-card" id="loginForm">
+<main class="login" id="badLink" hidden>
+  <div class="login-card">
     <img src="../images/logo-sm.webp" alt="" width="120" height="123">
-    <h1>ניהול האתר</h1>
-    <p class="muted">פודל משפחתי</p>
-    <label>אימייל<input type="email" name="email" autocomplete="username" required dir="ltr"></label>
-    <label>סיסמה<input type="password" name="password" autocomplete="current-password" required dir="ltr"></label>
-    <button class="btn primary" type="submit">כניסה</button>
-    <p class="error" id="loginError" role="alert"></p>
-    <p class="muted small" id="loginHint" hidden>בהדגמה אפשר להיכנס עם כל אימייל וסיסמה.</p>
-  </form>
+    <h1>הקישור לא תקין</h1>
+    <p class="muted">בדקו שהעתקתם את כל הקישור לניהול האתר.</p>
+  </div>
 </main>
 
 <!-- editor -->
-<div class="app" id="appView" hidden>
+<div class="app" id="appView">
   <header class="topbar">
     <div class="brand"><img src="../images/logo-sm.webp" alt="" width="40" height="41"><span>ניהול האתר</span></div>
     <nav class="tabs" role="tablist">
@@ -39,7 +33,6 @@
     </nav>
     <div class="top-actions">
       <a class="btn ghost" id="viewSite" target="_blank" rel="noopener">צפייה באתר ↗</a>
-      <button class="btn ghost" id="logout">יציאה</button>
     </div>
   </header>
 
@@ -66,8 +59,6 @@
 
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-<script src="../config.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script src="admin.js"></script>
 </body>
 </html>

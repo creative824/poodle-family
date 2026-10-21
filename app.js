@@ -1,5 +1,5 @@
-// פודל משפחתי: texts and gallery photos come from the admin panel (Supabase)
-// or, as a fallback, from data/*.json, never from this file.
+// פודל משפחתי: texts and gallery photos come from data/*.json (edited through
+// the admin panel, which commits them to the repo), never from this file.
 document.documentElement.classList.add("js");
 
 const GENDER = { male: "זכר", female: "נקבה" };
@@ -52,13 +52,13 @@ function applyContent() {
     const alt = site[img.dataset.img + "_alt"];
     if (alt) img.alt = alt;
   });
-  if (site.facebook) document.querySelectorAll("[data-fb]").forEach((a) => (a.href = site.facebook));
+  if (/^https:\/\//.test(site.facebook || "")) document.querySelectorAll("[data-fb]").forEach((a) => (a.href = site.facebook));
   $("#aboutText").innerHTML = (site.about_text || []).map((t, i) => `<p${i ? "" : ' class="first"'}>${esc(t)}</p>`).join("");
   const general = "היי, הגעתי מהאתר של פודל משפחתי ואשמח לשמוע על הגורים.";
   document.querySelectorAll("[data-wa]").forEach((a) => { a.href = waLink(general); a.target = "_blank"; a.rel = "noopener"; });
   document.querySelectorAll("[data-tel]").forEach((a) => (a.href = telLink()));
   const ig = $("[data-ig]");
-  if (site.instagram) { ig.href = site.instagram; ig.hidden = false; ig.target = "_blank"; ig.rel = "noopener"; }
+  if (/^https:\/\//.test(site.instagram || "")) { ig.href = site.instagram; ig.hidden = false; ig.target = "_blank"; ig.rel = "noopener"; }
   $("#year").textContent = new Date().getFullYear();
 }
 
@@ -208,24 +208,6 @@ async function load(path) {
   if (!r.ok) throw new Error(path);
   return r.json();
 }
-// Texts and photos saved from the admin panel live in Supabase (table "content",
-// rows "site" and "gallery"). If it isn't configured or can't be reached, the
-// site falls back to the JSON files in the repo.
-async function loadCms() {
-  const cfg = window.CMS_CONFIG || {};
-  if (!cfg.supabaseUrl || !cfg.supabaseAnonKey) return {};
-  try {
-    const r = await fetch(`${cfg.supabaseUrl}/rest/v1/content?select=id,data`, {
-      headers: { apikey: cfg.supabaseAnonKey, Authorization: `Bearer ${cfg.supabaseAnonKey}` },
-      cache: "no-cache",
-    });
-    if (!r.ok) throw new Error(r.status);
-    return Object.fromEntries((await r.json()).map((row) => [row.id, row.data]));
-  } catch (err) {
-    console.error("cms", err);
-    return {};
-  }
-}
 // ?preview shows the unsaved draft from the admin panel's demo mode (same browser only).
 function loadDraft() {
   if (!/[?&]preview\b/.test(location.search)) return {};
@@ -233,11 +215,11 @@ function loadDraft() {
 }
 (async () => {
   try {
-    const [cms, s, p, g] = await Promise.all([loadCms(), load("data/site.json"), load("data/puppies.json"), load("data/gallery.json")]);
+    const [s, p, g] = await Promise.all([load("data/site.json"), load("data/puppies.json"), load("data/gallery.json")]);
     const draft = loadDraft();
-    site = { ...s, ...cms.site, ...draft.site };
+    site = { ...s, ...draft.site };
     puppies = p;
-    gallery = draft.gallery || cms.gallery || g;
+    gallery = draft.gallery || g;
   } catch (err) {
     console.error(err);
   }

@@ -1,13 +1,17 @@
 // Admin panel for פודל משפחתי.
-// Live mode (config.js filled): Supabase email+password login, texts and gallery
-// saved to table "content" (rows "site", "gallery"), photos to bucket "images".
-// Demo mode (config.js empty): any login works, changes stay in this browser and
-// show on the site at ?preview.
+// Live mode: served by the Cloudflare Worker (worker/admin-worker.js) at a secret
+// link, admin.poodle-family.co.il/<key>. Saving sends everything to the Worker,
+// which checks the key and commits data/*.json and new photos to the repo;
+// GitHub Pages then republishes the site.
+// Demo mode (opened anywhere else): changes stay in this browser and show on
+// the site at ?preview.
 const BASE = document.querySelector('meta[name="site-base"]')?.content ?? "../";
 const DRAFT_KEY = "poodle-cms-draft";
-const cfg = window.CMS_CONFIG || {};
-const LIVE = !!(cfg.supabaseUrl && cfg.supabaseAnonKey);
-const sb = LIVE ? supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey) : null;
+const LIVE = document.querySelector('meta[name="admin-mode"]')?.content === "worker";
+const KEY = LIVE ? decodeURIComponent(location.pathname.split("/")[1] || "") : "";
+const API = location.origin + "/api/";
+// Photos uploaded this session but not yet on the published site: path -> data URL.
+const pending = {};
 
 const CATEGORIES = { puppies: "גורים", family: "המשפחה", home: "החיים בבית", special: "רגעים מיוחדים" };
 
@@ -60,7 +64,7 @@ const clone = (o) => JSON.parse(JSON.stringify(o));
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 // Repo photos and uploads both have a "-sm.webp" twin for thumbnails.
 const small = (src) => /\.webp$/.test(src || "") ? src.replace(/\.webp$/, "-sm.webp") : src;
-const url = (src) => !src || /^(https?:|data:|blob:)/.test(src) ? src : BASE + src;
+const url = (src) => pending[src] || (!src || /^(https?:|data:|blob:)/.test(src) ? src : BASE + src);
 
 function toast(msg, bad = false) {
   const t = $("#toast");
@@ -84,26 +88,38 @@ async function loadJson(path) {
   if (!r.ok) throw new Error(path);
   return r.json();
 }
+class BadLink extends Error {}
+async function api(path, body) {
+  const r = await fetch(API + path, {
+    method: body ? "POST" : "GET",
+    headers: { "X-Admin-Key": KEY, ...(body ? { "Content-Type": "application/json" } : {}) },
+    body: body && JSON.stringify(body),
+    cache: "no-store",
+  });
+  if (r.status === 401) throw new BadLink();
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(data.error || r.status);
+  return data;
+}
 async function loadAll() {
-  const [site, gallery] = await Promise.all([loadJson("data/site.json"), loadJson("data/gallery.json")]);
-  let stored = {};
   if (LIVE) {
-    const { data, error } = await sb.from("content").select("id,data");
-    if (error) throw error;
-    stored = Object.fromEntries(data.map((r) => [r.id, r.data]));
+    // straight from the repo, so a save shows up here before the site republishes
+    saved = await api("content");
   } else {
+    const [site, gallery] = await Promise.all([loadJson("data/site.json"), loadJson("data/gallery.json")]);
+    let stored = {};
     try { stored = JSON.parse(localStorage.getItem(DRAFT_KEY)) || {}; } catch {}
+    saved = { site: { ...site, ...stored.site }, gallery: stored.gallery || gallery };
   }
-  saved = { site: { ...site, ...stored.site }, gallery: stored.gallery || gallery };
   state = clone(saved);
 }
 async function saveAll() {
   if (LIVE) {
-    const { error } = await sb.from("content").upsert([
-      { id: "site", data: state.site },
-      { id: "gallery", data: state.gallery },
-    ]);
-    if (error) throw error;
+    const used = JSON.stringify(state);
+    const files = Object.entries(pending)
+      .filter(([path]) => used.includes(path.replace(/-sm\.webp$/, ".webp")))
+      .map(([path, dataUrl]) => ({ path, base64: dataUrl.slice(dataUrl.indexOf(",") + 1) }));
+    await api("save", { site: state.site, gallery: state.gallery, files });
   } else {
     localStorage.setItem(DRAFT_KEY, JSON.stringify(state));
   }
@@ -131,14 +147,12 @@ const asDataUrl = (blob) => new Promise((r) => { const f = new FileReader(); f.o
 
 async function uploadPhoto(file) {
   if (!LIVE) return asDataUrl(await toWebp(file, 900)); // demo: kept small to fit in browser storage
+  // live: held here and committed with the next save
   const [big, sm] = await Promise.all([toWebp(file, 1600), toWebp(file, 560)]);
-  const name = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-  const opts = { contentType: "image/webp", cacheControl: "31536000" };
-  const a = await sb.storage.from("images").upload(`${name}.webp`, big, opts);
-  if (a.error) throw a.error;
-  const b = await sb.storage.from("images").upload(`${name}-sm.webp`, sm, opts);
-  if (b.error) throw b.error;
-  return sb.storage.from("images").getPublicUrl(`${name}.webp`).data.publicUrl;
+  const path = `images/u/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.webp`;
+  pending[path] = await asDataUrl(big);
+  pending[small(path)] = await asDataUrl(sm);
+  return path;
 }
 
 /* ---------- dirty state ---------- */
@@ -151,7 +165,8 @@ function refreshDirty() {
   st.classList.toggle("dirty", dirty);
   document.querySelectorAll(".field[data-key]").forEach((f) => {
     const k = f.dataset.key;
-    f.classList.toggle("changed", !same(state.site[k], saved.site[k]) || (f.dataset.alt && !same(state.site[k + "_alt"], saved.site[k + "_alt"])));
+    const altChanged = !!f.dataset.alt && !same(state.site[k + "_alt"], saved.site[k + "_alt"]);
+    f.classList.toggle("changed", altChanged || !same(state.site[k], saved.site[k]));
   });
 }
 addEventListener("beforeunload", (e) => { if (!same(state, saved)) { e.preventDefault(); e.returnValue = ""; } });
@@ -339,11 +354,13 @@ $("#save").addEventListener("click", async () => {
   try {
     await saveAll();
     refreshDirty();
-    toast(LIVE ? "נשמר! השינויים כבר באתר" : "נשמר בהדגמה. אפשר לראות ב״צפייה באתר״");
+    toast(LIVE ? "נשמר! האתר יתעדכן תוך דקה בערך" : "נשמר בהדגמה. אפשר לראות ב״צפייה באתר״");
   } catch (err) {
     console.error(err);
     const quota = err && err.name === "QuotaExceededError";
-    toast(quota ? "אין מספיק מקום בדפדפן להדגמה. נסו פחות תמונות" : "השמירה נכשלה: " + (err.message || err), true);
+    toast(err instanceof BadLink ? "הקישור לא תקין יותר. בקשו קישור חדש"
+      : quota ? "אין מספיק מקום בדפדפן להדגמה. נסו פחות תמונות"
+      : "השמירה נכשלה: " + (err.message || err), true);
   } finally { done(); }
 });
 $("#discard").addEventListener("click", () => {
@@ -353,52 +370,22 @@ $("#discard").addEventListener("click", () => {
   renderGallery();
 });
 
-async function showApp() {
+(async () => {
+  $("#demoBar").hidden = LIVE;
+  $("#viewSite").href = siteUrl();
   const done = busy("טוען…");
   try {
     await loadAll();
   } catch (err) {
     console.error(err);
-    toast("לא הצלחנו לטעון את התוכן: " + (err.message || err), true);
-  } finally { done(); }
-  $("#loginView").hidden = true;
-  $("#appView").hidden = false;
-  $("#viewSite").href = siteUrl();
+    done();
+    if (err instanceof BadLink) {
+      $("#appView").hidden = true;
+      $("#badLink").hidden = false;
+    } else toast("לא הצלחנו לטעון את התוכן: " + (err.message || err), true);
+    return;
+  }
+  done();
   renderTexts();
   renderGallery();
-}
-function showLogin() {
-  $("#appView").hidden = true;
-  $("#loginView").hidden = false;
-}
-$("#loginForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const fd = new FormData(e.target);
-  $("#loginError").textContent = "";
-  if (LIVE) {
-    const { error } = await sb.auth.signInWithPassword({ email: fd.get("email").trim(), password: fd.get("password") });
-    if (error) {
-      $("#loginError").textContent = /invalid/i.test(error.message) ? "אימייל או סיסמה לא נכונים" : error.message;
-      return;
-    }
-  } else {
-    sessionStorage.setItem("poodle-demo-login", "1");
-  }
-  showApp();
-});
-$("#logout").addEventListener("click", async () => {
-  if (!same(state, saved) && !confirm("יש שינויים שלא נשמרו. לצאת בכל זאת?")) return;
-  state = clone(saved);
-  if (LIVE) await sb.auth.signOut();
-  else sessionStorage.removeItem("poodle-demo-login");
-  showLogin();
-});
-
-(async () => {
-  $("#demoBar").hidden = LIVE;
-  $("#loginHint").hidden = LIVE;
-  let in_ = false;
-  if (LIVE) in_ = !!(await sb.auth.getSession()).data.session;
-  else in_ = sessionStorage.getItem("poodle-demo-login") === "1";
-  in_ ? showApp() : showLogin();
 })();
