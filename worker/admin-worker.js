@@ -6,7 +6,7 @@
 //   /img/<name>.webp   photos uploaded from the panel
 // Texts and photos live in the KV namespace CONTENT. Only a SHA-256 of the key
 // is stored (ADMIN_KEY_SHA256), so the repo can stay public.
-const SITE = "https://creative824.github.io/poodle-family/";
+const SITE = "https://www.poodle-family.co.il/";
 const MAX_BODY = 40 * 1024 * 1024;
 const PHOTO = /^[\w-]+\.webp$/;
 const CORS = { "Access-Control-Allow-Origin": "*" };
@@ -48,7 +48,9 @@ const json = (data, status = 200, extra = {}) =>
 async function adminPage() {
   const r = await fetch(SITE + "admin/index.html", { cf: { cacheTtl: 0 } });
   if (!r.ok) throw new Error("admin page " + r.status);
-  const base = new URL("./", r.url).href;
+  // always https: GitHub Pages may redirect to http, and an http <base> on this
+  // https page would block every stylesheet and script as mixed content
+  const base = new URL("./", r.url).href.replace(/^http:/, "https:");
   const html = (await r.text()).replace(
     "<head>",
     `<head>\n<base href="${base}">\n<meta name="admin-mode" content="worker">`,
