@@ -1,0 +1,17 @@
+name: diag
+on:
+  push:
+    branches: [diag]
+jobs:
+  d:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          n() { echo "::notice::$*"; }
+          for u in https://creative824.github.io/poodle-family/admin/index.html https://www.poodle-family.co.il/admin/index.html https://www.poodle-family.co.il/admin/admin.js https://www.poodle-family.co.il/admin/admin.css https://www.poodle-family.co.il/data/site.json https://www.poodle-family.co.il/images/logo-sm.webp https://poodle-family.co.il/; do
+            n "$u -> $(curl -s -o /dev/null -w '%{http_code} final=%{url_effective} ssl=%{ssl_verify_result}' -L --max-time 20 "$u" 2>&1)"
+          done
+          n "github.io redirect: $(curl -sI https://creative824.github.io/poodle-family/admin/index.html | grep -i '^location' | tr -d '\r')"
+          n "www admin.js head: $(curl -sL https://www.poodle-family.co.il/admin/admin.js | head -c 120 | tr '\n' ' ')"
+          n "www cert: $(echo | openssl s_client -connect www.poodle-family.co.il:443 -servername www.poodle-family.co.il 2>/dev/null | openssl x509 -noout -subject -issuer 2>&1 | tr '\n' ' ')"
+          n "dig www: $(dig +short www.poodle-family.co.il | tr '\n' ' ') admin: $(dig +short admin.poodle-family.co.il | tr '\n' ' ')"
