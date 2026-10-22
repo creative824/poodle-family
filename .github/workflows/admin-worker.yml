@@ -53,3 +53,11 @@ jobs:
             sleep 15
           done
           echo "::warning::Deployed, but admin.poodle-family.co.il is not answering yet."
+      - name: Report what the live Worker answers
+        if: steps.token.outputs.ok == 'true'
+        run: |
+          check() { echo "::notice::$1 -> $(curl -s -o /dev/null -w '%{http_code}' -H "X-Admin-Key: $3" "https://admin.poodle-family.co.il$2") (want $4)"; }
+          check "public content" /public/content "" 200
+          check "unknown link" /not-the-key "" 404
+          check "api with wrong key" /api/content wrong 401
+          echo "::notice::admin page source -> $(curl -s -o /dev/null -w '%{http_code}' -L https://creative824.github.io/poodle-family/admin/index.html) (want 200)"
