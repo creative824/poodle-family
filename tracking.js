@@ -1,6 +1,8 @@
-// Google Ads contact clicks for poodle-family only.
+// Google Ads and GA4 contact clicks for poodle-family only.
 // The base Google tag AW-18473205415 is loaded once in index.html.
 (function () {
+  // Separate poodle-family GA4 property; never route these events to other sites.
+  const GA4_ID = "G-R6S3V80SJ0";
   // Exact destinations copied from the two Google Ads click-event snippets.
   const CONVERSIONS = Object.freeze({
     whatsapp: "AW-18473205415/5LxQCPPJjrodEKf92uhE",
@@ -16,6 +18,12 @@
   // Re-executing this script must not register another conversion listener.
   if (window.__poodleContactTrackingInstalled) return;
   window.__poodleContactTrackingInstalled = true;
+
+  const analyticsEnabled = /^G-[A-Z0-9]+$/.test(GA4_ID);
+  if (analyticsEnabled && typeof window.gtag === "function") {
+    // One initial page_view; reuse the Google tag already loaded in index.html.
+    window.gtag("config", GA4_ID);
+  }
 
   function channelOf(href) {
     if (/^tel:\s*\+?[\d(]/i.test(href)) return "phone";
@@ -44,5 +52,14 @@
       send_to: CONVERSIONS[channel],
       transport_type: "beacon",
     });
+    if (analyticsEnabled) {
+      // Explicit destination keeps all-traffic Analytics events out of Ads.
+      // Do not send link text, phone numbers, or WhatsApp message contents.
+      window.gtag("event", channel === "whatsapp" ? "whatsapp_click" : "phone_click", {
+        send_to: GA4_ID,
+        contact_method: channel,
+        transport_type: "beacon",
+      });
+    }
   }, true);
 })();
